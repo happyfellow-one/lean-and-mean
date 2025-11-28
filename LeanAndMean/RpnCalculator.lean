@@ -108,6 +108,8 @@ theorem rpnTranslationWorks
   case op operation t1 t2 ih1 ih2 =>
     simp [Term.rpn, rpn_append, ih1, ih2, eval_rpn, Term.eval]
 
+theorem rpnTranslationWorks' (t : Term) : eval_rpn t.rpn [] = .some [t.eval] := by
+  apply rpnTranslationWorks (s := [])
 
 -- Let's try the other way around!
 
@@ -145,6 +147,9 @@ theorem translationInv1
   case op operation t1 t2 ih1 ih2 =>
     simp [Term.rpn, rpn_to_terms_append, ih1, ih2, rpn_to_terms]
 
+theorem translationInv1' (t : Term) : rpn_to_terms t.rpn [] = .some [t] := by
+  apply translationInv1 (ts := [])
+
 -- eval is preserved:
 
 theorem rpn_to_terms_eval
@@ -168,6 +173,10 @@ theorem rpn_to_terms_eval
       case cons.cons head1 head2 tail =>
         conv => lhs; arg 2; change List.map Term.eval (.op operation head2 head1 :: tail)
         rw [ih]
+
+theorem rpn_to_terms_eval' (program : Program) :
+    eval_rpn program [] = (rpn_to_terms program []).map (fun x => x.map Term.eval) := by
+  apply rpn_to_terms_eval (s := [])
 
 /-
 The next theorem is slightly tricky to prove: if we need to handle ill-formed RPN
@@ -276,3 +285,11 @@ theorem translationInv2
       · assumption
       · simp [Term.rpn] at heq2 ⊢
         grind
+
+theorem translationInv2'
+    {c : ℤ}
+    (p : Program)
+    (ss : StackSignature p c 0) :
+    ∃ ts', rpn_to_terms p [] = .some ts' ∧ p = ts'.reverse.flatMap (·.rpn) := by
+  apply translationInv2 (ts := []) (ss := ss)
+  simp
