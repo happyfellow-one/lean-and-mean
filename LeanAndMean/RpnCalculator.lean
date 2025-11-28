@@ -1,5 +1,8 @@
 import Mathlib
 
+-- We're using native decide just for the examples
+set_option linter.style.nativeDecide false
+
 inductive Operation | add | sub | mul | div
   deriving DecidableEq
 
@@ -29,7 +32,7 @@ def Token.parse (input : String) : Option Token :=
 abbrev Program := List Token
 
 def parse (input : String) : Option (List Token) :=
-  (input.split (·.isWhitespace)).map Token.parse
+  (input.splitToList (·.isWhitespace)).map Token.parse
   |> sequence
 
 example : parse "10 20 +" = .some [.const 10, .const 20, .op .add] := by
@@ -108,7 +111,8 @@ def rpn_to_terms (program : Program) (s : List Term) : Option (List Term) :=
     | t1 :: t2 :: s => rpn_to_terms program (.op operation t2 t1 :: s)
     | _ => .none
 
-example : rpn_to_terms [.const 10, .const 20, .op .sub] [] = .some [.op .sub (.const 10) (.const 20)] := by
+example : rpn_to_terms [.const 10, .const 20, .op .sub] []
+        = .some [.op .sub (.const 10) (.const 20)] := by
   native_decide
 
 lemma rpn_to_terms_append (p1 p2 : Program) (s : List Term) :
@@ -137,7 +141,8 @@ theorem translationInv1
 theorem rpn_to_terms_eval
     (program : Program)
     (s : List Term) :
-    eval_rpn program (s.map Term.eval) = (rpn_to_terms program s).map (fun x => x.map Term.eval) := by
+    eval_rpn program (s.map Term.eval)
+    = (rpn_to_terms program s).map (fun x => x.map Term.eval) := by
   induction program generalizing s
   case nil => simp [eval_rpn, rpn_to_terms]
   case cons head tail ih =>
@@ -171,14 +176,21 @@ RPN on an empty stack doesn't crash, which will allow us to prove the inverse th
 -- at the bottom of the stack.
 inductive StackSignature : Program → Int → Int → Prop where
 | nil : StackSignature [] 0 0
-| const : StackSignature program c m → StackSignature (.const n :: program) (c+1) (m-1)
-| op : StackSignature program c m → StackSignature (.op operation :: program) (c-1) (max 2 (m+2))
+| const {program : Program} {c m : ℤ} (n : ℕ) :
+  StackSignature program c m →
+  StackSignature (.const n :: program) (c+1) (m-1)
+| op {program : Program} {c m : ℤ} (operation : Operation) :
+  StackSignature program c m →
+  StackSignature (.op operation :: program) (c-1) (max 2 (m+2))
 
 def WellFormedProgram (p : Program) : Prop := ∃ c, ∃ m ≤ 0, StackSignature p c m
 
 -- Sanity checking: evaluation should always work on well formed programs:
 
-lemma wellFormedEval (p : Program) (psd : StackSignature p c m) :
+lemma wellFormedEval
+    {c m : ℤ}
+    (p : Program)
+    (psd : StackSignature p c m) :
     ∀ (l : List ℕ) (_ : l.length ≥ m),
     ∃ s', eval_rpn p l = .some s' ∧ s'.length = l.length + c := by
   intro l hlen
@@ -188,7 +200,8 @@ lemma wellFormedEval (p : Program) (psd : StackSignature p c m) :
   case cons head tail ih =>
     cases psd
     case const c m n psd =>
-      have ⟨ s', a, b ⟩ : ∃ s', eval_rpn tail (n :: l) = .some s' ∧ s'.length = (n :: l).length + c := by
+      have ⟨ s', a, b ⟩ : ∃ s', eval_rpn tail (n :: l) = .some s'
+                                ∧ s'.length = (n :: l).length + c := by
         apply ih psd (n :: l); simp
         omega
       exists s'
@@ -210,13 +223,14 @@ lemma wellFormedEval (p : Program) (psd : StackSignature p c m) :
         use s'
 
 theorem translationInv2
+    {c m : ℤ}
     (p : Program)
     (ss : StackSignature p c m)
     (ts : List Term)
     (htslen : ts.length ≥ m) :
-    ∃ ts', rpn_to_terms p ts = .some ts' ∧ ts.reverse.flatMap (·.rpn) ++ p = ts'.reverse.flatMap (·.rpn) := by
+    ∃ ts', rpn_to_terms p ts = .some ts'
+           ∧ ts.reverse.flatMap (·.rpn) ++ p = ts'.reverse.flatMap (·.rpn) := by
   induction p generalizing ts c m
-  obtain ⟨ c, m, hm, hss ⟩ := ss
   case nil =>
     use ts
     simp [rpn_to_terms]
@@ -224,7 +238,9 @@ theorem translationInv2
     cases head
     cases ss
     case const.const a c m ss =>
-      have : ∃ ts', rpn_to_terms tail (.const a :: ts) = some ts' ∧ (.const a :: ts).reverse.flatMap (fun x => x.rpn) ++ tail = ts'.reverse.flatMap (fun x => x.rpn) := by
+      have : ∃ ts', rpn_to_terms tail (.const a :: ts) = some ts'
+             ∧ (.const a :: ts).reverse.flatMap (fun x => x.rpn) ++ tail
+               = ts'.reverse.flatMap (fun x => x.rpn) := by
         apply (ih ss)
         simp
         omega
@@ -239,9 +255,10 @@ theorem translationInv2
       cases ss; expose_names
       cases ts <;> simp at htslen; expose_names
       cases tail_1 <;> simp at htslen; expose_names
-      have : ∃ ts', rpn_to_terms tail (.op operation head_1 head :: tail_1) = some ts'
-                    ∧ (Term.op operation head_1 head :: tail_1).reverse.flatMap (fun x => x.rpn) ++ tail
-                      = ts'.reverse.flatMap (fun x => x.rpn) := by
+      have :
+          ∃ ts', rpn_to_terms tail (.op operation head_1 head :: tail_1) = some ts'
+            ∧ (Term.op operation head_1 head :: tail_1).reverse.flatMap (fun x => x.rpn) ++ tail
+               = ts'.reverse.flatMap (fun x => x.rpn) := by
         apply (ih h); simp; omega
       obtain ⟨ts', heq1, heq2⟩ := this
       use ts'
