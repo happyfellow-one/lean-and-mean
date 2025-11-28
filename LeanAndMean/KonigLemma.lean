@@ -22,48 +22,102 @@ structure RootedLocallyFiniteTree where
   V : Type
   root : V
   children : V → List V
-  infiniteDescendants : Infinite { v // IsDescendant children root v }
+  infiniteDescendants :  { v | IsDescendant children root v }.Infinite
+
+def RootedLocallyFiniteTree.IsDescendant'
+    (tree : RootedLocallyFiniteTree)
+    (v w : tree.V) : Prop :=
+  IsDescendant tree.children v w
 
 def RootedLocallyFiniteTree.descendants
     (tree : RootedLocallyFiniteTree)
     (start : tree.V) :
-    Type :=
-  { v // IsDescendant tree.children start v }
+    Set tree.V :=
+  { v | tree.IsDescendant' start v }
+
+def RootedLocallyFiniteTree.descendants_decomposition
+    (tree : RootedLocallyFiniteTree)
+    (v : tree.V) :
+    tree.descendants v = {v} ∪
+    ⋃ (v' ∈ (setOf fun x => x ∈ tree.children v)), tree.descendants v' := by
+  apply Set.ext
+  intro x
+  constructor
+  · intro hx
+    unfold descendants at hx
+    cases hx
+    · grind
+    · expose_names
+      have : x ∈ tree.descendants v' := by
+        unfold descendants
+        simp
+        trivial
+      apply Set.mem_union_right
+      rw [Set.mem_iUnion]
+      use v'
+      simp
+      grind
+  · intro h
+    cases h with
+    | inl h =>
+      cases h
+      unfold descendants
+      simp
+      constructor
+    | inr h =>
+      have : ∃ (v' : { w // w ∈ tree.children v }), x ∈ tree.descendants v' := by
+        rw [Set.mem_iUnion] at h
+        simp at h
+        obtain ⟨ v', hv', h ⟩ := h
+        use ⟨v', hv'⟩
+      obtain ⟨ v', h' ⟩ := this
+      unfold descendants
+      simp
+      apply IsDescendant.step (v' := v'.1)
+      · exact v'.2
+      · unfold descendants at h'
+        simp at h'
+        unfold IsDescendant' at h'
+        trivial
+
+def finite_children_descendants
+    (tree : RootedLocallyFiniteTree)
+    (v : tree.V)
+    (h : ∀ w ∈ tree.children v, (tree.descendants w).Finite) :
+    (tree.descendants v).Finite := by
+  rw [tree.descendants_decomposition]
+  rw [Set.finite_union]
+  constructor
+  · apply Set.finite_singleton
+  · have : {x | x ∈ tree.children v}.Finite := by simp
+    have : Finite {x | x ∈ tree.children v} := by
+      rw [Set.finite_coe_iff]
+      trivial
+    rw [Set.biUnion_eq_iUnion]
+    apply Set.finite_iUnion
+    grind
 
 lemma infinite_descendants_step
     (tree : RootedLocallyFiniteTree) :
-    ∃ v, v ∈ tree.children tree.root
-         ∧ Infinite (tree.descendants v) := by
+    ∃ v, v ∈ tree.children tree.root ∧ (tree.descendants v).Infinite := by
   apply Classical.by_contradiction
   intros h
   rw [<-Classical.not_forall_not, Classical.not_not] at h
-  have hfin : ∀ x ∈ tree.children tree.root, Finite (tree.descendants x) :=
-    sorry
-  suffices : Finite (tree.descendants tree.root)
-  · have : ¬Infinite (tree.descendants tree.root) := by
-      apply Finite.not_infinite this
-    exact (this tree.infiniteDescendants)
-  have hfintype : ∀ x ∈ tree.children tree.root, Fintype (tree.descendants x) := by
-    intro x hxmem
-    have : Finite (tree.descendants x) := hfin x hxmem
-    apply Fintype.ofFinite
-  let totalSize : ℕ :=
-    (tree.children tree.root).attach.map (fun (⟨x, xmem⟩ : { x // x ∈ tree.children tree.root })=>
-      let _ : Fintype _ := (hfintype x xmem)
-      Fintype.card (tree.descendants x)
-    )
-    |> List.sum
-  -- I need to check whether the root is contained in descendants or not, to know whether
-  -- I should add one for the root or not. Then I know the cardinality, so I can choose
-  -- proper Fin n.
-  sorry
+  conv at h =>
+    ext x
+    rw [Classical.not_and_iff_not_or_not, Classical.or_iff_not_imp_left, Classical.not_not]
+    arg 2
+    rw [Set.not_infinite]
+  suffices : (tree.descendants tree.root).Finite
+  · exact (tree.infiniteDescendants this)
+  apply finite_children_descendants
+  trivial
 
 structure InfiniteWalk (tree : RootedLocallyFiniteTree) where
   node : ℕ → tree.V
   properWalk : ∀ i, node (i + 1) ∈ tree.children (node i)
 
 def konigLemma'
-    (tree : RootedLocallyFiniteTree)
-    [Infinite tree.V] :
+    (tree : RootedLocallyFiniteTree) :
     InfiniteWalk tree := by
   sorry
