@@ -1,5 +1,14 @@
 import Mathlib
 
+/-!
+
+# Rpn Calculator and some theorems
+
+We implement Reverse Polish Notation calculator, translation to and from
+binary expression trees plus theorems tying them together.
+
+-/
+
 -- We're using native decide just for the examples
 set_option linter.style.nativeDecide false
 
@@ -52,7 +61,7 @@ def eval_rpn (program : Program) (stack : List ℕ) : Option (List ℕ) :=
 example : eval_rpn [.const 10, .const 10, .op .mul] [] = .some [100] := by
   native_decide
 
-
+/-- Type of binary operation trees. -/
 inductive Term where
 | const : ℕ → Term
 | op : Operation → Term → Term → Term
