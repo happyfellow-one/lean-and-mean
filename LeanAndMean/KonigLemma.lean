@@ -1,12 +1,10 @@
 import Mathlib
 
 /-!
-
 # Konig's Lemma
 
 Every finitely-branching infinite tree has an infinite path. Sounds easy, let's
 try a lean formalisation.
-
 -/
 
 inductive IsDescendant {V : Type} (children : V → List V) : V → V → Prop where
@@ -39,7 +37,7 @@ def RootedLocallyFiniteTree.descendants_decomposition
     (tree : RootedLocallyFiniteTree)
     (v : tree.V) :
     tree.descendants v = {v} ∪
-    ⋃ (v' ∈ (setOf fun x => x ∈ tree.children v)), tree.descendants v' := by
+    ⋃ (v' ∈ {x | x ∈ tree.children v}), tree.descendants v' := by
   apply Set.ext
   intro x
   constructor
