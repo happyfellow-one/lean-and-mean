@@ -98,8 +98,10 @@ def finite_children_descendants
     grind
 
 lemma infinite_descendants_step
-    (tree : RootedLocallyFiniteTree) :
-    ∃ v, v ∈ tree.children tree.root ∧ (tree.descendants v).Infinite := by
+    (tree : RootedLocallyFiniteTree)
+    (v : tree.V)
+    (hv : (tree.descendants v).Infinite) :
+    ∃ w, w ∈ tree.children v ∧ (tree.descendants w).Infinite := by
   apply Classical.by_contradiction
   intros h
   rw [<-Classical.not_forall_not, Classical.not_not] at h
@@ -108,8 +110,8 @@ lemma infinite_descendants_step
     rw [Classical.not_and_iff_not_or_not, Classical.or_iff_not_imp_left, Classical.not_not]
     arg 2
     rw [Set.not_infinite]
-  suffices : (tree.descendants tree.root).Finite
-  · exact (tree.infiniteDescendants this)
+  suffices : (tree.descendants v).Finite
+  · exact (hv this)
   apply finite_children_descendants
   trivial
 
@@ -117,7 +119,35 @@ structure InfiniteWalk (tree : RootedLocallyFiniteTree) where
   node : ℕ → tree.V
   properWalk : ∀ i, node (i + 1) ∈ tree.children (node i)
 
+noncomputable
+def konig_node
+    (tree : RootedLocallyFiniteTree)
+    (n : ℕ) : Σ' v, (tree.descendants v).Infinite :=
+  match n with
+  | .zero => ⟨tree.root, tree.infiniteDescendants⟩
+  | .succ n =>
+    let ⟨prev, hprev⟩ : Σ' prev, (tree.descendants prev).Infinite := konig_node tree n
+    have inf : ∃ w ∈ tree.children prev, (tree.descendants w).Infinite :=
+      infinite_descendants_step tree prev hprev
+    ⟨ Classical.choose inf
+    , by apply (Classical.choose_spec (h := inf)).2 ⟩
+
+noncomputable
 def konigLemma'
     (tree : RootedLocallyFiniteTree) :
     InfiniteWalk tree := by
-  sorry
+  classical
+  let node (n : ℕ) : tree.V := (konig_node tree n).1
+  have properWalk (i : ℕ) : node (i + 1) ∈ tree.children (node i) := by
+    suffices : node (i+1) ∈ tree.children (node i) ∧ (tree.descendants (node (i+1))).Infinite
+    · exact this.1
+    induction i with
+    | zero =>
+      simp [node, konig_node]
+      apply Classical.choose_spec
+        (p := (fun x => x ∈ tree.children tree.root ∧ (tree.descendants x).Infinite))
+    | succ i ih =>
+      simp [node, konig_node]
+      apply Classical.choose_spec
+        (p := (fun x => x ∈ tree.children (node (i+1)) ∧ (tree.descendants x).Infinite))
+  exact { node := node, properWalk := properWalk }
