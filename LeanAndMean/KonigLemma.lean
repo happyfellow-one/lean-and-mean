@@ -141,13 +141,7 @@ def konigLemma'
   have properWalk (i : ℕ) : node (i + 1) ∈ tree.children (node i) := by
     suffices : node (i+1) ∈ tree.children (node i) ∧ (tree.descendants (node (i+1))).Infinite
     · exact this.1
-    induction i with
-    | zero =>
-      simp [node, konig_node]
-      apply Classical.choose_spec
-        (p := (fun x => x ∈ tree.children tree.root ∧ (tree.descendants x).Infinite))
-    | succ i ih =>
-      simp [node, konig_node]
-      apply Classical.choose_spec
-        (p := (fun x => x ∈ tree.children (node (i+1)) ∧ (tree.descendants x).Infinite))
+    simp [node, konig_node]
+    apply Classical.choose_spec
+      (p := (fun x => x ∈ tree.children (node i) ∧ (tree.descendants x).Infinite))
   exact { node := node, properWalk := properWalk }
