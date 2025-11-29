@@ -118,10 +118,9 @@ def konig_node
     ⟨ Classical.choose inf
     , by apply (Classical.choose_spec (h := inf)).2 ⟩
 
-noncomputable
-def konigLemma'
+theorem konigLemma'
     (tree : RootedLocallyFiniteTree) :
-    InfiniteWalk tree := by
+    Nonempty (InfiniteWalk tree) := by
   classical
   let node (n : ℕ) : tree.V := (konig_node tree n).1
   have properWalk (i : ℕ) : node (i + 1) ∈ tree.children (node i) := by
@@ -130,4 +129,5 @@ def konigLemma'
     simp [node, konig_node]
     apply Classical.choose_spec
       (p := (fun x => x ∈ tree.children (node i) ∧ (tree.descendants x).Infinite))
+  constructor
   exact { node := node, properWalk := properWalk }
