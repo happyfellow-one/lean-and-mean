@@ -22,18 +22,21 @@ structure RootedLocallyFiniteTree where
   children : V → List V
   infiniteDescendants :  { v | IsDescendant children root v }.Infinite
 
+@[grind, simp]
 def RootedLocallyFiniteTree.IsDescendant'
     (tree : RootedLocallyFiniteTree)
     (v w : tree.V) : Prop :=
   IsDescendant tree.children v w
 
+@[grind, simp]
 def RootedLocallyFiniteTree.descendants
     (tree : RootedLocallyFiniteTree)
     (start : tree.V) :
     Set tree.V :=
   { v | tree.IsDescendant' start v }
 
-def RootedLocallyFiniteTree.descendants_decomposition
+@[grind =]
+theorem RootedLocallyFiniteTree.descendants_decomposition
     (tree : RootedLocallyFiniteTree)
     (v : tree.V) :
     tree.descendants v = {v} ∪
@@ -42,14 +45,10 @@ def RootedLocallyFiniteTree.descendants_decomposition
   intro x
   constructor
   · intro hx
-    unfold descendants at hx
     cases hx
     · grind
     · expose_names
-      have : x ∈ tree.descendants v' := by
-        unfold descendants
-        simp
-        trivial
+      have : x ∈ tree.descendants v' := by grind
       apply Set.mem_union_right
       rw [Set.mem_iUnion]
       use v'
@@ -59,7 +58,6 @@ def RootedLocallyFiniteTree.descendants_decomposition
     cases h with
     | inl h =>
       cases h
-      unfold descendants
       simp
       constructor
     | inr h =>
@@ -68,15 +66,11 @@ def RootedLocallyFiniteTree.descendants_decomposition
         simp at h
         obtain ⟨ v', hv', h ⟩ := h
         use ⟨v', hv'⟩
+        grind
       obtain ⟨ v', h' ⟩ := this
-      unfold descendants
-      simp
       apply IsDescendant.step (v' := v'.1)
       · exact v'.2
-      · unfold descendants at h'
-        simp at h'
-        unfold IsDescendant' at h'
-        trivial
+      · grind
 
 def finite_children_descendants
     (tree : RootedLocallyFiniteTree)
@@ -89,7 +83,7 @@ def finite_children_descendants
   · apply Set.finite_singleton
   · have : {x | x ∈ tree.children v}.Finite := by simp
     have : Finite {x | x ∈ tree.children v} := by
-      rw [Set.finite_coe_iff]
+      simp_rw [Set.finite_coe_iff]
       trivial
     rw [Set.biUnion_eq_iUnion]
     apply Set.finite_iUnion
@@ -100,18 +94,12 @@ lemma infinite_descendants_step
     (v : tree.V)
     (hv : (tree.descendants v).Infinite) :
     ∃ w, w ∈ tree.children v ∧ (tree.descendants w).Infinite := by
-  apply Classical.by_contradiction
-  intros h
-  rw [<-Classical.not_forall_not, Classical.not_not] at h
-  conv at h =>
-    ext x
-    rw [Classical.not_and_iff_not_or_not, Classical.or_iff_not_imp_left, Classical.not_not]
-    arg 2
-    rw [Set.not_infinite]
+  by_contra h
+  push_neg at h
   suffices : (tree.descendants v).Finite
   · exact (hv this)
   apply finite_children_descendants
-  trivial
+  simpa [Set.not_infinite] using h
 
 structure InfiniteWalk (tree : RootedLocallyFiniteTree) where
   node : ℕ → tree.V
