@@ -24,7 +24,7 @@ theorem dfs_sound
     (visited : Finset V)
     (v w : V)
     (h : w ∈ dfs v nodes visited) :
-    w ∈ visited ∪ {v} ∨ Reachable (nodes := nodes) v w := by
+    w ∈ visited ∪ {v} ∨ Reachable nodes v w := by
   fun_induction dfs v nodes visited
   · grind
   · expose_names
@@ -73,6 +73,28 @@ inductive SimpleWalk (nodes : V → Finset V) : List V → Prop where
   v₁ ∉ (v₂ :: vs) →
   SimpleWalk nodes (v₁ :: v₂ :: vs)
 
+theorem SimpleWalk.middle_edge
+    {nodes : V → Finset V}
+    {vs₁ vs₂}
+    {v₁ v₂}
+    (walk : SimpleWalk nodes (vs₁ ++ [v₁, v₂] ++ vs₂)) :
+    v₂ ∈ nodes v₁ := by
+  induction vs₁ generalizing vs₂ with
+  | nil =>
+    cases walk; trivial
+  | cons head tail ih =>
+    simp at walk
+    cases tail with
+    | nil =>
+      simp at walk
+      cases walk
+      apply ih
+      assumption
+    | cons head1 tail =>
+      cases walk
+      apply ih
+      · simp; assumption
+
 theorem SimpleWalk.partition
     {nodes : V → Finset V}
     {vs vs₁ vs₂}
@@ -114,21 +136,31 @@ theorem SimpleWalk.partition
         apply ih2
         trivial
 
-theorem SimpleWalk.subwalk
-    {nodes : V → Finset V}
-    {vs vs₁ vs₂ vs₃}
-    (walk : SimpleWalk nodes vs)
-    (hpart : vs = vs₁ ++ vs₂ ++ vs₃)
-    (hnonempty : vs₂ ≠ []) :
-    SimpleWalk nodes vs₂ := by
-  rcases walk.partition hpart with ⟨h1, h2⟩
-  have : vs₁ ++ vs₂ ≠ [] := by
-    apply List.append_ne_nil_of_right_ne_nil
-    trivial
-  have h1 : SimpleWalk nodes (vs₁ ++ vs₂) := by apply h1; trivial
-  rcases h1.partition (vs := vs₁ ++ vs₂) (vs₁ := vs₁) (vs₂ := vs₂) (hpart := by grind) with ⟨h1, h2⟩
-  apply h2
-  trivial
+theorem List.mem_split_last
+    {α : Type}
+    [DecidableEq α]
+    (l : List α)
+    (x : α)
+    (h : x ∈ l) :
+    ∃ l1 l2, l = l1 ++ [x] ++ l2 ∧ x ∉ l2 := by
+  induction l with
+  | nil => simp at h
+  | cons head tail ih =>
+    by_cases x = head
+    case pos heq =>
+      by_cases x ∈ tail
+      case neg h => use [], tail; grind
+      case pos h =>
+        have : ∃ l1 l2, tail = l1 ++ [x] ++ l2 ∧ x ∉ l2 := by
+          apply ih
+          trivial
+        rcases this with ⟨ l1, l2, heq, hnotin ⟩
+        use (x :: l1), l2; grind
+    case neg heq =>
+      expose_names
+      have hxtail : x ∈ tail := by grind
+      rcases ih hxtail with ⟨ l1, l2, heq, hnotin ⟩
+      use (head :: l1), l2; grind
 
 theorem simple_walk_of_reachable
     (nodes : V → Finset V)
@@ -151,27 +183,84 @@ theorem simple_walk_of_reachable
       · constructor <;> grind
       · grind
     case pos hv =>
-      sorry
+      have hpart : ∃ vs₁ vs₂, v₂ :: vs = vs₁ ++ [v₁] ++ vs₂ ∧ v₁ ∉ vs₂ := by
+        apply List.mem_split_last
+        trivial
+      rcases hpart with ⟨vs₁, vs₂, hpart, hpartnot⟩
+      rcases walk.partition hpart with ⟨h1, h2⟩
+      cases vs₂ with
+      | nil =>
+        use []
+        constructor
+        · constructor
+        · grind
+      | cons v₂_head v₂_tail =>
+        use (v₂_head :: v₂_tail)
+        constructor
+        · constructor
+          · rw [hpart] at walk
+            rw [List.append_cons] at walk
+            conv at walk =>
+              arg 2
+              arg 1
+              rw [List.append_assoc]
+              arg 2
+              simp
+            apply SimpleWalk.middle_edge
+            trivial
+          · apply h2; grind
+          · grind
+        · grind
 
-
-/-
-To prove completeness:
- - Show that Reachable implies simple walk.
- - IH: if Reachable v w then
--/
-
-theorem dfs_complete
-    (start v w : V)
+theorem dfs_complete_walk
+    (v : V)
+    (vs : List V)
     (nodes : V → Finset V)
     (visited : Finset V)
-    (h : Reachable nodes start w) :
-    w ∈ dfs v nodes visited := by
-  induction h generalizing visited with
-  | refl v =>
+    (walk : SimpleWalk nodes (v :: vs))
+    (h : ∀ x ∈ visited, x ∉ v :: vs) :
+    (v :: vs).getLast (by grind) ∈ dfs v nodes visited := by
+  cases walk with
+  | empty v =>
     have hexp : visited ∪ {v} ⊆ dfs v nodes visited := by apply dfs_expansive
     grind
   | step =>
     expose_names
     unfold dfs
+    by_cases v ∈ visited
+    case pos h' => grind
+    case neg h' =>
+      simp [h']
+      right
+      by_cases (v₂ :: vs).getLast (by grind) ∈ visited
+      case pos h'' => left; grind
+      case neg h'' =>
+        right
+        use v₂
+        constructor
+        · trivial
+        · apply dfs_complete_walk
+          · trivial
+          · intro x hin hin'
+            rw [Finset.mem_insert] at hin
+            cases hin with
+            | inl hin => rw [←hin] at h_3; contradiction
+            | inr hin =>
+              have : x ∉ v :: v₂ :: vs := by apply h; trivial
+              grind
 
-    sorry
+def dfs_complete
+    (v w : V)
+    (nodes : V → Finset V)
+    (reachable : Reachable nodes v w) :
+    w ∈ dfs v nodes ∅ := by
+  have walk : ∃ vs, SimpleWalk nodes (v :: vs) ∧ (v :: vs).getLast (by grind) = w := by
+    apply simple_walk_of_reachable
+    trivial
+  rcases walk with ⟨vs, walk, hlast⟩
+  have : (v :: vs).getLast (by grind) ∈ dfs v nodes ∅ := by
+    apply dfs_complete_walk v vs
+    · trivial
+    · grind
+  rw [hlast] at this
+  apply this
