@@ -56,13 +56,6 @@ theorem dfs_sound
           · trivial
           · trivial
 
-lemma dfs_expansive
-    (v : V)
-    (nodes : V → Finset V)
-    (visited : Finset V) :
-    visited ∪ {v} ⊆ dfs v nodes visited := by
-  fun_induction dfs v nodes visited <;> grind
-
 inductive SimpleWalk (nodes : V → Finset V) : List V → Prop where
 | empty : (v : V) → SimpleWalk nodes [v]
 | step :
@@ -151,15 +144,10 @@ theorem List.mem_split_last
       by_cases x ∈ tail
       case neg h => use [], tail; grind
       case pos h =>
-        have : ∃ l1 l2, tail = l1 ++ [x] ++ l2 ∧ x ∉ l2 := by
-          apply ih
-          trivial
-        rcases this with ⟨ l1, l2, heq, hnotin ⟩
+        rcases ih h with ⟨ l1, l2, heq, hnotin ⟩
         use (x :: l1), l2; grind
     case neg heq =>
-      expose_names
-      have hxtail : x ∈ tail := by grind
-      rcases ih hxtail with ⟨ l1, l2, heq, hnotin ⟩
+      rcases ih (by grind) with ⟨ l1, l2, heq, hnotin ⟩
       use (head :: l1), l2; grind
 
 theorem simple_walk_of_reachable
@@ -221,9 +209,7 @@ theorem dfs_complete_walk
     (h : ∀ x ∈ visited, x ∉ v :: vs) :
     (v :: vs).getLast (by grind) ∈ dfs v nodes visited := by
   cases walk with
-  | empty v =>
-    have hexp : visited ∪ {v} ⊆ dfs v nodes visited := by apply dfs_expansive
-    grind
+  | empty v => unfold dfs; grind
   | step =>
     expose_names
     unfold dfs
