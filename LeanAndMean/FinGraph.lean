@@ -3,7 +3,7 @@ import Mathlib
 variable {V : Type} [Fintype V] [DecidableEq V]
 
 def dfs [Fintype V] (v : V) (nodes : V → Finset V) (visited : Finset V) : Finset V :=
-  if hin : v ∈ visited
+  if _hin : v ∈ visited
   then visited
   else
     let visited' := visited ∪ {v}
@@ -12,12 +12,10 @@ termination_by (Fintype.card V - visited.card)
 decreasing_by
   have hlt : visited.card < (visited ∪ {v}).card := by grind
   apply Nat.sub_lt_sub_left
-  · apply Finset.card_lt_univ_of_notMem hin
+  · apply Finset.card_lt_univ_of_notMem _hin
   · assumption
 
-inductive Reachable (nodes : V → Finset V) : V → V → Prop where
-| refl : (v : V) → Reachable nodes v v
-| step : {v₁ v₂ v₃ : V} → v₂ ∈ nodes v₁ → Reachable nodes v₂ v₃ → Reachable nodes v₁ v₃
+def Reachable (nodes : V → Finset V) := Relation.ReflTransGen (fun x y => y ∈ nodes x)
 
 theorem dfs_sound
     (nodes : V → Finset V)
@@ -47,87 +45,47 @@ theorem dfs_sound
             rw [Finset.mem_singleton] at ih
             rw [ih] at *
             right
-            apply Reachable.step (v₁ := v) (v₂ := a) (v₃ := a)
-            · trivial
-            · constructor
+            apply Relation.ReflTransGen.single
+            trivial
         | inr ih =>
           right
-          apply Reachable.step (v₁ := v) (v₂ := a) (v₃ := w)
-          · trivial
-          · trivial
+          have : Reachable nodes v a := by apply Relation.ReflTransGen.single; trivial
+          apply Relation.ReflTransGen.trans (b := a) <;> trivial
 
-inductive SimpleWalk (nodes : V → Finset V) : List V → Prop where
-| empty : (v : V) → SimpleWalk nodes [v]
-| step :
-  {v₁ v₂ : V} →
-  {vs : List V} →
-  v₂ ∈ nodes v₁ →
-  SimpleWalk nodes (v₂ :: vs) →
-  v₁ ∉ (v₂ :: vs) →
-  SimpleWalk nodes (v₁ :: v₂ :: vs)
+@[simp]
+def Walk (nodes : V → Finset V) (w : List V) := w.IsChain (fun x y => y ∈ nodes x)
 
-theorem SimpleWalk.middle_edge
-    {nodes : V → Finset V}
-    {vs₁ vs₂}
-    {v₁ v₂}
-    (walk : SimpleWalk nodes (vs₁ ++ [v₁, v₂] ++ vs₂)) :
-    v₂ ∈ nodes v₁ := by
-  induction vs₁ generalizing vs₂ with
-  | nil =>
-    cases walk; trivial
-  | cons head tail ih =>
-    simp at walk
-    cases tail with
-    | nil =>
-      simp at walk
-      cases walk
-      apply ih
-      assumption
-    | cons head1 tail =>
-      cases walk
-      apply ih
-      · simp; assumption
+@[simp]
+def SimpleWalk (nodes : V → Finset V) (w : List V) := Walk nodes w ∧ w.Nodup
 
+omit [Fintype V] [DecidableEq V] in
 theorem SimpleWalk.partition
     {nodes : V → Finset V}
-    {vs vs₁ vs₂}
-    (walk : SimpleWalk nodes vs)
-    (hpart : vs = vs₁ ++ vs₂) :
-    (vs₁ ≠ [] → SimpleWalk nodes vs₁)
-    ∧ (vs₂ ≠ [] → SimpleWalk nodes vs₂) := by
-  induction walk generalizing vs₁ vs₂
-  case empty v =>
-    have : vs₁ = [v] ∨ vs₂ = [v] := by
-      cases vs₁ <;> cases vs₂ <;> simp at hpart <;> grind
-    constructor <;> intros <;> cases this <;> simp_all <;> constructor
-  case step =>
-    expose_names
-    cases vs₁ with
-    | nil =>
-      constructor <;> intros <;> try contradiction
-      simp at hpart
-      rw [←hpart]
-      constructor <;> assumption
-    | cons head tail =>
-      have hhead : head = v₁ := by grind
-      have hpart' : v₂ :: vs_1 = tail ++ vs₂ := by grind
-      have : (tail ≠ [] → SimpleWalk nodes tail) ∧ (vs₂ ≠ [] → SimpleWalk nodes vs₂) := by
-        apply a_ih; trivial
-      rcases this with ⟨ih1, ih2⟩
-      constructor
-      · intro _
-        rw [hhead]
-        cases tail with
-        | nil => constructor
-        | cons head' tail =>
-          have hhead' : head' = v₂ := by grind
-          constructor
-          · rw [hhead']; trivial
-          · apply ih1; grind
-          · grind
-      · intro hne
-        apply ih2
-        trivial
+    {vs₁ vs₂}
+    (walk : SimpleWalk nodes (vs₁ ++ vs₂)) :
+    SimpleWalk nodes vs₁ ∧ SimpleWalk nodes vs₂ := by
+  rcases walk with ⟨walk, hnodup⟩
+  simp at walk
+  constructor
+  <;> constructor
+  <;> first
+    | simpa [Walk] using List.IsChain.left_of_append walk
+    | simpa [Walk] using List.IsChain.right_of_append walk
+    | grind
+
+theorem List.getLast_split
+    {α : Type}
+    [DecidableEq α]
+    (l : List α)
+    (hnonempty : l ≠ [])
+    (x : α)
+    (h : l.getLast hnonempty = x) :
+    ∃ l1, l = l1 ++ [x] := by
+  use l.take (l.length -1)
+  apply List.ext_getElem
+  · grind
+  · intro i h₁ h₂
+    by_cases i < l.length - 1 <;> grind
 
 theorem List.mem_split_last
     {α : Type}
@@ -150,55 +108,53 @@ theorem List.mem_split_last
       rcases ih (by grind) with ⟨ l1, l2, heq, hnotin ⟩
       use (head :: l1), l2; grind
 
+omit [Fintype V] in
 theorem simple_walk_of_reachable
     (nodes : V → Finset V)
     (v w : V)
     (reachable : Reachable nodes v w) :
     ∃ vs, SimpleWalk nodes (v :: vs) /\ (v :: vs).getLast (by grind) = w := by
   induction reachable with
-  | refl a =>
+  | refl =>
     use []
-    constructor
-    · constructor
-    · simp
-  | step =>
+    repeat constructor <;> simp
+  | tail hrel hnode a_ih =>
     expose_names
     rcases a_ih with ⟨vs, walk, hlast⟩
-    by_cases v₁ ∈ (v₂ :: vs)
-    case neg hv =>
-      use (v₂ :: vs)
+    by_cases c ∈ (v :: vs)
+    case neg h =>
+      use (vs ++ [c])
       constructor
-      · constructor <;> grind
-      · grind
-    case pos hv =>
-      have hpart : ∃ vs₁ vs₂, v₂ :: vs = vs₁ ++ [v₁] ++ vs₂ ∧ v₁ ∉ vs₂ := by
+      · have : ∃ vs₁, v :: vs = vs₁ ++ [b] := by
+          apply List.getLast_split; trivial
+        rcases this with ⟨vs₁, heq⟩
+        rw [←List.cons_append, heq]
+        simp only [SimpleWalk, Walk]
+        constructor
+        · simp; constructor
+          · rw [←heq]; exact walk.1
+          · trivial
+        · rw [←heq]
+          have : (v :: vs).Nodup := walk.2
+          grind
+      · simp
+    case pos h =>
+      have hpart : ∃ vs₁ vs₂, v :: vs = vs₁ ++ [c] ++ vs₂ ∧ c ∉ vs₂ := by
         apply List.mem_split_last
         trivial
       rcases hpart with ⟨vs₁, vs₂, hpart, hpartnot⟩
-      rcases walk.partition hpart with ⟨h1, h2⟩
-      cases vs₂ with
-      | nil =>
-        use []
-        constructor
-        · constructor
-        · grind
-      | cons v₂_head v₂_tail =>
-        use (v₂_head :: v₂_tail)
-        constructor
-        · constructor
-          · rw [hpart] at walk
-            rw [List.append_cons] at walk
-            conv at walk =>
-              arg 2
-              arg 1
-              rw [List.append_assoc]
-              arg 2
-              simp
-            apply SimpleWalk.middle_edge
-            trivial
-          · apply h2; grind
-          · grind
-        · grind
+      rw [hpart] at walk
+      rcases SimpleWalk.partition walk with ⟨h1, _⟩
+      have hhead : ∃ vs', vs₁ ++ [c] = v :: vs' := by
+        cases vs₁ with
+        | nil => use []; simp at hpart; grind
+        | cons head tail => use (tail ++ [c]); grind
+      rcases hhead with ⟨vs', hhead⟩
+      use vs'
+      constructor
+      · rw [←hhead]; trivial
+      · apply List.getLast_of_getLast?_eq_some
+        rw [←hhead]; simp
 
 theorem dfs_complete_walk
     (v : V)
@@ -208,9 +164,9 @@ theorem dfs_complete_walk
     (walk : SimpleWalk nodes (v :: vs))
     (h : ∀ x ∈ visited, x ∉ v :: vs) :
     (v :: vs).getLast (by grind) ∈ dfs v nodes visited := by
-  cases walk with
-  | empty v => unfold dfs; grind
-  | step =>
+  cases vs with
+  | nil => unfold dfs; grind
+  | cons v₂ vs =>
     expose_names
     unfold dfs
     by_cases v ∈ visited
@@ -221,16 +177,18 @@ theorem dfs_complete_walk
       by_cases (v₂ :: vs).getLast (by grind) ∈ visited
       case pos h'' => left; grind
       case neg h'' =>
+        rcases walk with ⟨walk, hnodup⟩
+        unfold Walk at walk
         right
         use v₂
         constructor
-        · trivial
+        · grind
         · apply dfs_complete_walk
-          · trivial
+          · unfold SimpleWalk; unfold Walk; grind
           · intro x hin hin'
             rw [Finset.mem_insert] at hin
             cases hin with
-            | inl hin => rw [←hin] at h_3; contradiction
+            | inl hin => rw [←hin] at hnodup; grind
             | inr hin =>
               have : x ∉ v :: v₂ :: vs := by apply h; trivial
               grind
