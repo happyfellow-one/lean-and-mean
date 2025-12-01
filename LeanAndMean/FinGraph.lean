@@ -26,31 +26,16 @@ theorem dfs_sound
   fun_induction dfs v nodes visited
   · grind
   · expose_names
-    by_cases w ∈ visited
-    case pos => grind
-    case neg hwin =>
-      rw [Finset.mem_union] at h
-      cases h with
-      | inl h => left; assumption
-      | inr h =>
-        rw [Finset.mem_biUnion] at h
-        rcases h with ⟨a, hanode, hwin'⟩
-        have ih : w ∈ visited' ∪ {a} ∨ Reachable nodes a w := by apply ih1; grind
-        cases ih with
-        | inl ih =>
-          rw [Finset.mem_union] at ih
-          cases ih with
-          | inl ih => left; trivial
-          | inr ih =>
-            rw [Finset.mem_singleton] at ih
-            rw [ih] at *
-            right
-            apply Relation.ReflTransGen.single
-            trivial
-        | inr ih =>
-          right
-          have : Reachable nodes v a := by apply Relation.ReflTransGen.single; trivial
-          apply Relation.ReflTransGen.trans (b := a) <;> trivial
+    rw [Finset.mem_union] at h
+    cases h with
+    | inl h => grind
+    | inr h =>
+      rw [Finset.mem_biUnion] at h
+      rcases h with ⟨a, hanode, hwin'⟩
+      have _ : Reachable nodes v a := by apply Relation.ReflTransGen.single; trivial
+      cases ih1 a hwin' with
+      | inl ih => grind
+      | inr ih => right; apply Relation.ReflTransGen.trans (b := a) <;> trivial
 
 @[simp]
 def Walk (nodes : V → Finset V) (w : List V) := w.IsChain (fun x y => y ∈ nodes x)
@@ -87,27 +72,6 @@ theorem List.getLast_split
   · intro i h₁ h₂
     by_cases i < l.length - 1 <;> grind
 
-theorem List.mem_split_last
-    {α : Type}
-    [DecidableEq α]
-    (l : List α)
-    (x : α)
-    (h : x ∈ l) :
-    ∃ l1 l2, l = l1 ++ [x] ++ l2 ∧ x ∉ l2 := by
-  induction l with
-  | nil => simp at h
-  | cons head tail ih =>
-    by_cases x = head
-    case pos heq =>
-      by_cases x ∈ tail
-      case neg h => use [], tail; grind
-      case pos h =>
-        rcases ih h with ⟨ l1, l2, heq, hnotin ⟩
-        use (x :: l1), l2; grind
-    case neg heq =>
-      rcases ih (by grind) with ⟨ l1, l2, heq, hnotin ⟩
-      use (head :: l1), l2; grind
-
 omit [Fintype V] in
 theorem simple_walk_of_reachable
     (nodes : V → Finset V)
@@ -139,10 +103,11 @@ theorem simple_walk_of_reachable
           grind
       · simp
     case pos h =>
-      have hpart : ∃ vs₁ vs₂, v :: vs = vs₁ ++ [c] ++ vs₂ ∧ c ∉ vs₂ := by
-        apply List.mem_split_last
+      have hpart : ∃ vs₁ vs₂, v :: vs = vs₁ ++ [c] ++ vs₂ := by
+        simp
+        rw [←List.mem_iff_append]
         trivial
-      rcases hpart with ⟨vs₁, vs₂, hpart, hpartnot⟩
+      rcases hpart with ⟨vs₁, vs₂, hpart⟩
       rw [hpart] at walk
       rcases SimpleWalk.partition walk with ⟨h1, _⟩
       have hhead : ∃ vs', vs₁ ++ [c] = v :: vs' := by
