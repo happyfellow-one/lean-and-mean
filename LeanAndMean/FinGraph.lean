@@ -23,18 +23,16 @@ theorem dfs_sound
     (v w : V)
     (h : w ∈ dfs v nodes visited) :
     w ∈ visited ∪ {v} ∨ Reachable nodes v w := by
-  fun_induction dfs v nodes visited
-  · grind
-  · expose_names
-    rw [Finset.mem_union] at h
-    cases h with
-    | inl h => grind
+  fun_induction dfs v nodes visited with
+  | case1 =>  grind
+  | case2 v _ _ _ ih =>
+    cases cast (Iff.eq Finset.mem_union) h with
+    | inl => grind
     | inr h =>
-      rw [Finset.mem_biUnion] at h
-      rcases h with ⟨a, hanode, hwin'⟩
+      rcases cast (Iff.eq Finset.mem_biUnion) h with ⟨a, hanode, hwin'⟩
       have _ : Reachable nodes v a := by apply Relation.ReflTransGen.single; trivial
-      cases ih1 a hwin' with
-      | inl ih => grind
+      cases ih a hwin' with
+      | inl => grind
       | inr ih => right; apply Relation.ReflTransGen.trans (b := a) <;> trivial
 
 @[simp]
@@ -62,15 +60,45 @@ theorem List.getLast_split
     {α : Type}
     [DecidableEq α]
     (l : List α)
-    (hnonempty : l ≠ [])
-    (x : α)
-    (h : l.getLast hnonempty = x) :
-    ∃ l1, l = l1 ++ [x] := by
+    (hnonempty : l ≠ []) :
+    ∃ l1, l = l1 ++ [l.getLast hnonempty] := by
   use l.take (l.length -1)
   apply List.ext_getElem
   · grind
-  · intro i h₁ h₂
-    by_cases i < l.length - 1 <;> grind
+  · intro i h₁ h₂; by_cases i < l.length - 1 <;> grind
+
+omit [Fintype V] [DecidableEq V] in
+theorem SimpleWalk.truncate
+    (nodes : V → Finset V)
+    (v w : V)
+    (vs : List V)
+    (walk : SimpleWalk nodes (v :: vs))
+    (h : w ∈ (v :: vs)) :
+    ∃ vs', SimpleWalk nodes (v :: vs') ∧ (v :: vs').getLast (by grind) = w := by
+  have : ∃ vs₁ vs₂, v :: vs = vs₁ ++ [w] ++ vs₂ := by
+    simp; rw [←List.mem_iff_append]; trivial
+  rcases this with ⟨vs₁, vs₂, heq⟩
+  rw [heq] at walk
+  rcases SimpleWalk.partition walk with ⟨h, _⟩
+  have : ∃ vs', vs₁ ++ [w] = v :: vs' := by cases h : vs₁ ++ [w] <;> grind
+  rcases this with ⟨vs', heq⟩
+  grind
+
+omit [Fintype V] in
+theorem SimpleWalk.append
+    (nodes : V → Finset V)
+    (v w : V)
+    (vs : List V)
+    (walk : SimpleWalk nodes (v :: vs))
+    (h₁ : w ∉ v :: vs)
+    (h₂ : w ∈ nodes ((v :: vs).getLast (by grind))) :
+    SimpleWalk nodes (v :: vs ++ [w]) := by
+  rcases List.getLast_split (v :: vs) (by grind) with ⟨vs', h⟩
+  rcases walk with ⟨walk, hnodup⟩
+  constructor
+  · unfold Walk
+    apply List.IsChain.append <;> first | exact walk | grind
+  · grind -- nodup
 
 omit [Fintype V] in
 theorem simple_walk_of_reachable
@@ -79,47 +107,16 @@ theorem simple_walk_of_reachable
     (reachable : Reachable nodes v w) :
     ∃ vs, SimpleWalk nodes (v :: vs) /\ (v :: vs).getLast (by grind) = w := by
   induction reachable with
-  | refl =>
-    use []
-    repeat constructor <;> simp
-  | tail hrel hnode a_ih =>
-    expose_names
+  | refl => use []; repeat constructor <;> simp
+  | @tail b c hrel hnode a_ih =>
     rcases a_ih with ⟨vs, walk, hlast⟩
     by_cases c ∈ (v :: vs)
+    case pos h => apply SimpleWalk.truncate <;> assumption
     case neg h =>
       use (vs ++ [c])
       constructor
-      · have : ∃ vs₁, v :: vs = vs₁ ++ [b] := by
-          apply List.getLast_split; trivial
-        rcases this with ⟨vs₁, heq⟩
-        rw [←List.cons_append, heq]
-        simp only [SimpleWalk, Walk]
-        constructor
-        · simp; constructor
-          · rw [←heq]; exact walk.1
-          · trivial
-        · rw [←heq]
-          have : (v :: vs).Nodup := walk.2
-          grind
+      · rw [←List.cons_append]; apply SimpleWalk.append <;> grind
       · simp
-    case pos h =>
-      have hpart : ∃ vs₁ vs₂, v :: vs = vs₁ ++ [c] ++ vs₂ := by
-        simp
-        rw [←List.mem_iff_append]
-        trivial
-      rcases hpart with ⟨vs₁, vs₂, hpart⟩
-      rw [hpart] at walk
-      rcases SimpleWalk.partition walk with ⟨h1, _⟩
-      have hhead : ∃ vs', vs₁ ++ [c] = v :: vs' := by
-        cases vs₁ with
-        | nil => use []; simp at hpart; grind
-        | cons head tail => use (tail ++ [c]); grind
-      rcases hhead with ⟨vs', hhead⟩
-      use vs'
-      constructor
-      · rw [←hhead]; trivial
-      · apply List.getLast_of_getLast?_eq_some
-        rw [←hhead]; simp
 
 theorem dfs_complete_walk
     (v : V)
@@ -129,34 +126,23 @@ theorem dfs_complete_walk
     (walk : SimpleWalk nodes (v :: vs))
     (h : ∀ x ∈ visited, x ∉ v :: vs) :
     (v :: vs).getLast (by grind) ∈ dfs v nodes visited := by
-  cases vs with
-  | nil => unfold dfs; grind
-  | cons v₂ vs =>
-    expose_names
-    unfold dfs
-    by_cases v ∈ visited
-    case pos h' => grind
-    case neg h' =>
-      simp [h']
-      right
-      by_cases (v₂ :: vs).getLast (by grind) ∈ visited
-      case pos h'' => left; grind
-      case neg h'' =>
-        rcases walk with ⟨walk, hnodup⟩
-        unfold Walk at walk
-        right
-        use v₂
-        constructor
-        · grind
-        · apply dfs_complete_walk
-          · unfold SimpleWalk; unfold Walk; grind
-          · intro x hin hin'
-            rw [Finset.mem_insert] at hin
-            cases hin with
-            | inl hin => rw [←hin] at hnodup; grind
-            | inr hin =>
-              have : x ∉ v :: v₂ :: vs := by apply h; trivial
-              grind
+  fun_induction dfs v nodes visited generalizing vs
+  case case1 => grind
+  case case2 _ v visited hnotin visited' ih =>
+    let last := (v :: vs).getLast (by grind)
+    by_cases last ∈ visited'
+    case pos => grind
+    case neg hnotinlast =>
+      apply Finset.mem_union_right
+      rw [Finset.mem_biUnion]
+      cases vs with
+      | nil => grind -- walk ends here
+      | cons head tail =>
+        use head
+        have _ : head ∈ nodes v := by simp at walk; grind
+        have _ : SimpleWalk nodes (head :: tail) := by simp at walk; simp; grind
+        have _ : ∀ x ∈ visited', x ∉ head :: tail := by unfold visited'; simp at walk; grind
+        constructor <;> grind
 
 def dfs_complete
     (v w : V)
@@ -168,8 +154,6 @@ def dfs_complete
     trivial
   rcases walk with ⟨vs, walk, hlast⟩
   have : (v :: vs).getLast (by grind) ∈ dfs v nodes ∅ := by
-    apply dfs_complete_walk v vs
-    · trivial
-    · grind
+    apply dfs_complete_walk v vs <;> grind
   rw [hlast] at this
   apply this
