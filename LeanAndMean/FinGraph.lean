@@ -11,6 +11,10 @@ Below you'll find an implementation of a DFS-like graph traversal, together with
 One-step adjacency is represented by nodes function.
 
 As far as I can tell, it's Lean tradition to start with a random looking List lemma:
+
+TODO: This is not really a DFS, it explores all walks exhaustively which is very
+inefficient. Upgrade the proof to an actual DFS implementation which is linear
+in the size of the graph.
 -/
 
 lemma List.getLast_split
